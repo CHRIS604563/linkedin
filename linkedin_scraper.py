@@ -391,6 +391,8 @@ SEARCH_KEYWORDS = [
     "Help Desk",
     "Suporte Nivel 1",
     "IT Support",
+    "Auxiliar de Informática",
+    "Auxiliar de T.I"
 ]
 
 LOCATIONS = [
