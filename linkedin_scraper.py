@@ -324,7 +324,7 @@ class LinkedInJobScraper:
             print(f"[*] 🏠 Buscas remotas: {remote_locations}")
         if local_locations:
             print(f"[*] 📍 Buscas locais: {local_locations}")
-        print(f"[*] Verificando a cada 5 minutos")
+        print(f"[*] Verificando a cada 20 minutos")
         print(f"{'='*60}\n")
         
         while True:
