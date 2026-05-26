@@ -367,10 +367,10 @@ class LinkedInJobScraper:
                 print(f"[✓] Ciclo completo: {total_new} vagas relevantes")
                 if remote_new > 0:
                     print(f"    🏠 Remotas verificadas: {remote_new}")
-                print(f"[*] Próxima verificação em 5 minutos")
+                print(f"[*] Próxima verificação em 20 minutos")
                 print(f"{'='*60}\n")
                 
-                time.sleep(300)
+                time.sleep(1200)
                 
             except KeyboardInterrupt:
                 print("\n[*] Monitor interrompido")
