@@ -1,6 +1,3 @@
-import sys
-sys.stdout.reconfigure(line_buffering=True)  # For render logs
-
 import requests
 from bs4 import BeautifulSoup
 import time
@@ -34,27 +31,32 @@ class LinkedInJobScraper:
             'Connection': 'keep-alive',
         }
     
-    def is_truly_remote(self, titulo: str, local: str, search_location: str) -> bool:
+    def is_truly_remote(self, titulo: str, local: str, search_location: str, card_element=None) -> bool:
         """
-        FILTRO BRUTAL - retorna True APENAS se for REALMENTE remoto
+        IMPROVED REMOTE DETECTION
+        Now checks:
+        1. Title for remote keywords
+        2. Location text for remote keywords  
+        3. Job badges/tags in the card
+        4. HTML attributes that indicate remote
         """
         titulo_lower = titulo.lower()
         local_lower = local.lower()
         search_lower = search_location.lower()
         
-        # Se a busca NÃO é por remote, aceitar tudo
+        # If search location is NOT remote, accept everything
         if 'remote' not in search_lower and 'remoto' not in search_lower:
             return True
         
-        # AGORA A BUSCA É POR REMOTE - FILTRAR COM FORÇA
+        # NOW SEARCH IS FOR REMOTE - STRICT FILTERING
         
-        # BLACKLIST - Se tiver QUALQUER uma dessas, NÃO É REMOTO
+        # BLACKLIST - If has ANY of these, it's NOT remote
         palavras_nao_remoto = [
             'on-site', 'onsite', 'on site',
             'presencial', 'in-office', 'office based',
             'escritorio', 'escritório',
             'local', 'sede',
-            # Cidades específicas que indicam presencial
+            # Cidades específicas
             'sao paulo, sp', 'rio de janeiro, rj', 'belo horizonte',
             'salvador, ba', 'brasilia, df', 'curitiba',
             'porto alegre', 'fortaleza', 'recife',
@@ -67,7 +69,7 @@ class LinkedInJobScraper:
             if palavra in local_lower or palavra in titulo_lower:
                 return False
         
-        # WHITELIST - Aceitar APENAS se tiver uma dessas
+        # WHITELIST - Look for remote keywords
         palavras_remoto_real = [
             'remote',
             'remoto',
@@ -84,17 +86,46 @@ class LinkedInJobScraper:
             'de qualquer lugar'
         ]
         
-        # Verificar se TEM palavra remota no local OU no título
-        tem_palavra_remota = any(p in local_lower for p in palavras_remoto_real)
-        tem_palavra_remota_titulo = any(p in titulo_lower for p in palavras_remoto_real)
+        # Check in title
+        tem_palavra_remota = any(p in titulo_lower for p in palavras_remoto_real)
         
-        if not (tem_palavra_remota or tem_palavra_remota_titulo):
-            return False
+        # Check in location
+        tem_palavra_remota_local = any(p in local_lower for p in palavras_remoto_real)
         
-        # VERIFICAÇÃO ADICIONAL: Se tem "Remote in [cidade]", é SUSPEITO
-        # Exemplo: "Remote in São Paulo" = provavelmente híbrido disfarçado
-        if 'remote in' in local_lower or 'remoto em' in local_lower:
-            # Se menciona cidade específica, REJEITAR
+        # 🔥 NEW: Check in job card HTML for badges/tags
+        tem_badge_remoto = False
+        if card_element:
+            try:
+                # Look for badge/tag text that says "Remote"
+                badges = card_element.find_all(['span', 'div'], {'class': re.compile(r'badge|tag|label|pill')})
+                badge_text = ' '.join([b.text.lower() for b in badges])
+                
+                if 'remote' in badge_text or 'remoto' in badge_text:
+                    tem_badge_remoto = True
+                
+                # Also check any text elements in the card for "Remote"
+                all_text = card_element.get_text().lower()
+                
+                # Look for the pattern "Remote" appearing near location
+                if re.search(r'remote\s*[\•\-\|]', all_text):
+                    tem_badge_remoto = True
+                    
+                if 'remote · ' in all_text or 'remote -' in all_text:
+                    tem_badge_remoto = True
+                    
+            except:
+                pass
+        
+        # Accept if ANY of these conditions are true:
+        # 1. "Remote" in title
+        # 2. "Remote" in location  
+        # 3. "Remote" badge found in card
+        if tem_palavra_remota or tem_palavra_remota_local or tem_badge_remoto:
+            return True
+        
+        # Check for "Remote in [location]" pattern
+        if re.search(r'remote\s+in', local_lower, re.IGNORECASE):
+            # Unless it's a specific Brazilian city
             cidades_br = [
                 'paulo', 'janeiro', 'horizonte', 'salvador', 'brasilia',
                 'curitiba', 'alegre', 'fortaleza', 'recife', 'goiania',
@@ -102,9 +133,10 @@ class LinkedInJobScraper:
             ]
             if any(cidade in local_lower for cidade in cidades_br):
                 return False
+            return True
         
-        # Se passou por tudo, É REMOTO
-        return True
+        # If nothing matched, it's NOT remote
+        return False
     
     def keywords_match(self, titulo: str, keyword: str) -> bool:
         """Verifica se o título é relevante para TI/Suporte"""
@@ -116,7 +148,7 @@ class LinkedInJobScraper:
             'tecnico', 'technical', 'support', 'it', 'assistente', 'auxiliar',
             'analista', 'infra', 'redes', 'sistemas', 'computador', 'software',
             'hardware', 'service desk', 'field support', 'desktop', 'nivel 1',
-            'nivel1', 'level 1', 'level1', 'junior', 'jr'
+            'nivel1', 'level 1', 'level1', 'junior', 'jr', 'technician'
         ]
         
         palavras_erradas = [
@@ -175,14 +207,14 @@ class LinkedInJobScraper:
         params = {
             'keywords': keyword,
             'location': location,
-            'f_TPR': 'r86400',
+            'f_TPR': 'r3600',
             'position': 1,
             'pageNum': 0
         }
         
-        # Se busca é por remote, adicionar filtro LinkedIn
+        # If search is for remote, add LinkedIn's remote filter
         if 'remote' in location.lower() or 'remoto' in location.lower():
-            params['f_WT'] = '2'  # Filtro remoto do LinkedIn
+            params['f_WT'] = '2'  # LinkedIn's remote work type filter
         
         url = f"{base_url}?{urlencode(params)}"
         
@@ -202,7 +234,7 @@ class LinkedInJobScraper:
             jobs = []
             for card in job_cards:
                 try:
-                    # Extrair título
+                    # Extract title
                     title_elem = card.find('h3') or card.find('a', {'class': re.compile(r'title|link')})
                     if not title_elem:
                         continue
@@ -212,7 +244,7 @@ class LinkedInJobScraper:
                     if not self.keywords_match(title, keyword):
                         continue
                     
-                    # Extrair ID
+                    # Extract job ID
                     job_id = card.get('data-job-id')
                     if not job_id:
                         link_elem = card.find('a', href=True)
@@ -222,19 +254,19 @@ class LinkedInJobScraper:
                     if not job_id:
                         continue
                     
-                    # Extrair empresa
+                    # Extract company
                     company_elem = card.find('h4') or card.find('span', {'class': re.compile(r'company')})
                     company = company_elem.text.strip() if company_elem else 'N/A'
                     
-                    # Extrair local
+                    # Extract location
                     location_elem = card.find('span', {'class': re.compile(r'location')})
                     job_location = location_elem.text.strip() if location_elem else location
                     
-                    # 🔥 FILTRO BRUTAL DE REMOTE
-                    if not self.is_truly_remote(title, job_location, location):
-                        continue  # SKIP vagas não-remotas
+                    # 🔥 IMPROVED REMOTE DETECTION - Pass the card element now
+                    if not self.is_truly_remote(title, job_location, location, card):
+                        continue
                     
-                    # Extrair link
+                    # Extract link
                     link_elem = card.find('a', href=True)
                     link = link_elem['href'] if link_elem else ''
                     if link and not link.startswith('http'):
@@ -281,7 +313,6 @@ class LinkedInJobScraper:
     def format_telegram_message(self, job):
         lang_icon = "🇧🇷" if self.detectar_idioma_titulo(job['title']) == 'pt-br' else "🇺🇸"
         
-        # Se a busca foi por remote, é GARANTIDO remoto agora
         is_remote_search = 'remote' in job['search_location'].lower() or 'remoto' in job['search_location'].lower()
         
         msg = f"🚀 {lang_icon} <b>NOVA VAGA</b>\n\n"
@@ -301,7 +332,6 @@ class LinkedInJobScraper:
         return msg
     
     def run(self):
-        # Corrigir locations
         locations_corrigidas = []
         for loc in self.locations:
             if ',' in loc:
@@ -311,14 +341,13 @@ class LinkedInJobScraper:
         
         total_searches = len(self.keywords) * len(self.locations)
         
-        # Separar buscas remotas de presenciais
         remote_locations = [l for l in self.locations if 'remote' in l.lower() or 'remoto' in l.lower()]
         local_locations = [l for l in self.locations if l not in remote_locations]
         
         print(f"\n{'='*60}")
-        print(f"[*] LinkedIn Job Scraper - FILTRO REMOTO BRUTAL")
+        print(f"[*] LinkedIn Job Scraper - IMPROVED REMOTE DETECTION")
         print(f"[*] 📋 Filtrando vagas de TI/Suporte")
-        print(f"[*] 🏠 APENAS remotas verdadeiras para buscas 'Remote'")
+        print(f"[*] 🏠 Detectando REMOTE em título, location E badges")
         print(f"[*] {len(self.keywords)} keywords × {len(self.locations)} locations")
         if remote_locations:
             print(f"[*] 🏠 Buscas remotas: {remote_locations}")
@@ -391,15 +420,15 @@ SEARCH_KEYWORDS = [
     "Help Desk",
     "Suporte Nivel 1",
     "IT Support",
-    "Auxiliar de Informática",
-    "Auxiliar de T.I"
+    "IT Technician",
+    "Technical Support",
 ]
 
 LOCATIONS = [
     "Maranhao",
     "Sao Luis", 
-    "Remote",        # ← Vai filtrar BRUTAL - só remotas verdadeiras
-    "Remoto"         # ← Idem
+    "Remote",        # Vai detectar mesmo sem "remote" no título
+    "Remoto"
 ]
 
 TELEGRAM_BOT_TOKEN = "8867079058:AAFGNaBdxEA83AGJaahjIsubpM3Pm0UL3vM"
