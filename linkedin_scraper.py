@@ -417,6 +417,8 @@ SEARCH_KEYWORDS = [
     "Assistente de TI",
     "Assistente de Informatica",
     "Tecnico de Suporte",
+    "Auxiliar de T.I",
+    "Auxiliar de Informática",
     "Help Desk",
     "Suporte Nivel 1",
     "IT Support",
