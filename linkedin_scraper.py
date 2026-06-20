@@ -144,11 +144,12 @@ class LinkedInJobScraper:
         keyword_lower = keyword.lower()
         
         palavras_ti = [
-            'ti', 'informatica', 'tecnologia', 'suporte', 'help desk', 'helpdesk',
-            'tecnico', 'technical', 'support', 'it', 'assistente', 'auxiliar',
-            'analista', 'infra', 'redes', 'sistemas', 'computador', 'software',
-            'hardware', 'service desk', 'field support', 'desktop', 'nivel 1',
-            'nivel1', 'level 1', 'level1', 'junior', 'jr', 'technician'
+
+   'ti', 'informatica', 'tecnologia', 'suporte', 'help desk', 'helpdesk',
+        'support', 'infra', 'infraestrutura', 'redes', 'sistemas', 'rede',
+        'computador', 'software', 'hardware', 'service desk', 'field support',
+        'desktop', 'sysadmin', 'devops', 'helpdesk', 'ti.', 't.i'
+            
         ]
         
         palavras_erradas = [
